@@ -13,11 +13,6 @@
       "maxDuration": 10,
       "runtime": "nodejs20.x"
     }
-  },
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ]
+  }
+  
 } 
