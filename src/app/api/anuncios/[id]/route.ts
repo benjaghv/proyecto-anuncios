@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client'
-import jwt from 'jsonwebtoken'
 import { NextResponse } from 'next/server'
-
-const prisma = new PrismaClient()
+import jwt from 'jsonwebtoken'
+import { prisma } from '@/lib/prisma'
 
 // Función para verificar el token y obtener el userId
 async function getUserIdFromToken(token: string) {

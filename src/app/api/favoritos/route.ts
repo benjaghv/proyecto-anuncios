@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient, Prisma } from '@prisma/client'
 import jwt from 'jsonwebtoken'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma'
 
 interface JwtPayload {
   userId: string
@@ -43,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(favorito)
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
       return NextResponse.json({ message: 'El anuncio ya está en favoritos' }, { status: 400 })
     }
     return NextResponse.json({ message: 'Error al agregar a favoritos' }, { status: 500 })
