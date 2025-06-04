@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import jwt from 'jsonwebtoken'
 
 const prisma = new PrismaClient()
 
+interface JwtPayload {
+  userId: string
+}
+
 async function getUserIdFromToken(token: string) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as JwtPayload
     return decoded.userId
   } catch {
     return null
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(favorito)
   } catch (error) {
-    if (error.code === 'P2002') {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json({ message: 'El anuncio ya está en favoritos' }, { status: 400 })
     }
     return NextResponse.json({ message: 'Error al agregar a favoritos' }, { status: 500 })
@@ -73,7 +77,7 @@ export async function DELETE(req: NextRequest) {
     })
 
     return NextResponse.json({ message: 'Favorito eliminado' })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ message: 'Error al eliminar de favoritos' }, { status: 500 })
   }
 }
@@ -108,7 +112,7 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json(favoritos)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ message: 'Error al obtener favoritos' }, { status: 500 })
   }
 } 

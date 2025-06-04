@@ -1,6 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+
+interface User {
+  id: string
+  name: string
+  email: string
+}
+
+interface Anuncio {
+  id: string
+  titulo: string
+  contenido: string
+  userId: string
+  user?: User
+}
+
+interface Favorito {
+  id: string
+  anuncioId: string
+  anuncio: Anuncio
+}
 
 export default function HomePage() {
   const [email, setEmail] = useState('')
@@ -8,11 +28,11 @@ export default function HomePage() {
   const [token, setToken] = useState('')
   const [titulo, setTitulo] = useState('')
   const [contenido, setContenido] = useState('')
-  const [anuncios, setAnuncios] = useState([])
-  const [favoritos, setFavoritos] = useState<any[]>([])
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([])
+  const [favoritos, setFavoritos] = useState<Favorito[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [editandoAnuncio, setEditandoAnuncio] = useState<{ id: string; titulo: string; contenido: string } | null>(null)
 
   const registrar = async () => {
@@ -172,12 +192,12 @@ export default function HomePage() {
       const res = await fetch('/api/anuncios')
       const data = await res.json()
       setAnuncios(data)
-    } catch (err) {
+    } catch {
       setError('Error al cargar los anuncios')
     }
   }
 
-  const cargarFavoritos = async () => {
+  const cargarFavoritos = useCallback(async () => {
     if (!token) return
     try {
       const res = await fetch('/api/favoritos', {
@@ -187,10 +207,10 @@ export default function HomePage() {
       })
       const data = await res.json()
       setFavoritos(data)
-    } catch (err) {
+    } catch {
       setError('Error al cargar favoritos')
     }
-  }
+  }, [token])
 
   const toggleFavorito = async (anuncioId: string) => {
     if (!token) return
@@ -221,7 +241,7 @@ export default function HomePage() {
     if (token) {
       cargarFavoritos()
     }
-  }, [token])
+  }, [token, cargarFavoritos])
 
   useEffect(() => {
     cargarAnuncios()
@@ -298,7 +318,7 @@ export default function HomePage() {
                 </div>
               )}
               <div className="space-y-4">
-                {anuncios.map((a: any) => (
+                {anuncios.map((a: Anuncio) => (
                   <div key={a.id} className="border-b border-gray-200 pb-4 last:border-0">
                     <h3 className="text-lg font-medium text-gray-900">{a.titulo}</h3>
                     <p className="mt-2 text-gray-600">{a.contenido}</p>
@@ -373,7 +393,7 @@ export default function HomePage() {
                     </div>
                   )}
                   <div className="space-y-4">
-                    {anuncios.map((a: any) => (
+                    {anuncios.map((a: Anuncio) => (
                       <div key={a.id} className="border-b border-gray-200 pb-4 last:border-0">
                         {editandoAnuncio && editandoAnuncio.id === a.id ? (
                           <div className="space-y-4">
@@ -465,7 +485,7 @@ export default function HomePage() {
                 <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-6 sticky top-8 border border-gray-100">
                   <h2 className="text-2xl font-semibold text-gray-800 mb-4">Favoritos</h2>
                   <div className="space-y-4">
-                    {favoritos.map((f: any) => (
+                    {favoritos.map((f: Favorito) => (
                       <div key={f.id} className="border-b border-gray-200 pb-4 last:border-0">
                         <h3 className="text-lg font-medium text-gray-900">{f.anuncio.titulo}</h3>
                         <p className="mt-2 text-gray-600 line-clamp-2">{f.anuncio.contenido}</p>
