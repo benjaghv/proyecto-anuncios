@@ -1,5 +1,6 @@
 {
-  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
+  // Forcing new deployment
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build --force",
   "installCommand": "npm install",
   "framework": "nextjs",
   "outputDirectory": ".next",
