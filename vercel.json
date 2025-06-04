@@ -6,13 +6,5 @@
   "outputDirectory": ".next",
   "env": {
     "DATABASE_URL": "file:/tmp/dev.db"
-  },
-  "functions": {
-    "api/**/*.ts": {
-      "memory": 1024,
-      "maxDuration": 10,
-      "runtime": "@vercel/node@20.x"
-    }
   }
-  
 } 
