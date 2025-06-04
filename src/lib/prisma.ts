@@ -1,21 +1,9 @@
 import { PrismaClient } from '@prisma/client'
 
 const prismaClientSingleton = () => {
-  const client = new PrismaClient({
-    log: ['error'],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL || 'file:/tmp/dev.db'
-      }
-    }
+  return new PrismaClient({
+    log: ['error']
   })
-
-  // Asegurarse de que la base de datos existe
-  client.$connect().catch((error) => {
-    console.error('Error connecting to database:', error)
-  })
-
-  return client
 }
 
 type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>

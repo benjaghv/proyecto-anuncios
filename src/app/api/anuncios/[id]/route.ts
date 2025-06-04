@@ -1,91 +1,125 @@
 import { NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db'
+import { getUserIdFromToken } from '@/lib/auth'
 
-// Función para verificar el token y obtener el userId
-async function getUserIdFromToken(token: string) {
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string }
-    return decoded.userId
-  } catch {
-    return null
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function PUT(request: Request, context: any) {
-  const { params } = context;
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const token = request.headers.get('Authorization')?.split(' ')[1]
     if (!token) {
-      return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Token no proporcionado' },
+        { status: 401 }
+      )
     }
 
-    const userId = await getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
+    let userId: string
+    try {
+      userId = await getUserIdFromToken(token)
+      console.log('UserId extraído en PUT:', userId)
+    } catch (error) {
+      console.error('Error al verificar token en PUT:', error)
+      return NextResponse.json(
+        { message: 'Token inválido o expirado' },
+        { status: 401 }
+      )
     }
 
-    const { titulo, contenido } = await request.json()
-    if (!titulo || !contenido) {
-      return NextResponse.json({ message: 'Título y contenido son requeridos' }, { status: 400 })
-    }
-
-    const anuncio = await prisma.anuncio.findUnique({
+    const anuncio = await db.anuncio.findUnique({
       where: { id: params.id }
     })
 
     if (!anuncio) {
-      return NextResponse.json({ message: 'Anuncio no encontrado' }, { status: 404 })
+      return NextResponse.json(
+        { message: 'Anuncio no encontrado' },
+        { status: 404 }
+      )
     }
 
     if (anuncio.userId !== userId) {
-      return NextResponse.json({ message: 'No autorizado para editar este anuncio' }, { status: 403 })
+      return NextResponse.json(
+        { message: 'No tienes permiso para editar este anuncio' },
+        { status: 403 }
+      )
     }
 
-    const anuncioActualizado = await prisma.anuncio.update({
+    const data = await request.json()
+    const anuncioActualizado = await db.anuncio.update({
       where: { id: params.id },
-      data: { titulo, contenido }
+      data: {
+        titulo: data.titulo,
+        descripcion: data.descripcion,
+        precio: data.precio,
+        categoria: data.categoria,
+        imagen: data.imagen
+      }
     })
 
     return NextResponse.json(anuncioActualizado)
-  } catch {
-    return NextResponse.json({ message: 'Error al actualizar el anuncio' }, { status: 500 })
+  } catch (error) {
+    console.error('Error al actualizar anuncio:', error)
+    return NextResponse.json(
+      { message: 'Error al actualizar el anuncio' },
+      { status: 500 }
+    )
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function DELETE(request: Request, context: any) {
-  const { params } = context;
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const token = request.headers.get('Authorization')?.split(' ')[1]
     if (!token) {
-      return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Token no proporcionado' },
+        { status: 401 }
+      )
     }
 
-    const userId = await getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
+    let userId: string
+    try {
+      userId = await getUserIdFromToken(token)
+      console.log('UserId extraído en DELETE:', userId)
+    } catch (error) {
+      console.error('Error al verificar token en DELETE:', error)
+      return NextResponse.json(
+        { message: 'Token inválido o expirado' },
+        { status: 401 }
+      )
     }
 
-    const anuncio = await prisma.anuncio.findUnique({
+    const anuncio = await db.anuncio.findUnique({
       where: { id: params.id }
     })
 
     if (!anuncio) {
-      return NextResponse.json({ message: 'Anuncio no encontrado' }, { status: 404 })
+      return NextResponse.json(
+        { message: 'Anuncio no encontrado' },
+        { status: 404 }
+      )
     }
 
     if (anuncio.userId !== userId) {
-      return NextResponse.json({ message: 'No autorizado para eliminar este anuncio' }, { status: 403 })
+      return NextResponse.json(
+        { message: 'No tienes permiso para eliminar este anuncio' },
+        { status: 403 }
+      )
     }
 
-    await prisma.anuncio.delete({
+    await db.anuncio.delete({
       where: { id: params.id }
     })
 
-    return NextResponse.json({ message: 'Anuncio eliminado' })
-  } catch {
-    return NextResponse.json({ message: 'Error al eliminar el anuncio' }, { status: 500 })
+    return NextResponse.json({ message: 'Anuncio eliminado exitosamente' })
+  } catch (error) {
+    console.error('Error al eliminar anuncio:', error)
+    return NextResponse.json(
+      { message: 'Error al eliminar el anuncio' },
+      { status: 500 }
+    )
   }
 } 

@@ -1,30 +1,26 @@
-import { NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-
-async function getUserIdFromToken(token: string) {
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string }
-    return decoded.userId
-  } catch {
-    return null
-  }
-}
+import { getUserIdFromToken } from '@/lib/auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const token = request.headers.get('Authorization')?.split(' ')[1]
+    const token = req.headers.get('Authorization')?.split(' ')[1]
     if (!token) {
       return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
     }
 
-    const userId = await getUserIdFromToken(token)
-    if (!userId) {
+    console.log('Token recibido en POST:', token)
+    let userId: string
+    try {
+      userId = await getUserIdFromToken(token)
+      console.log('UserId extraído:', userId)
+    } catch (error) {
+      console.error('Error al verificar token:', error)
       return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
     }
 
-    const { titulo, contenido } = await request.json()
+    const { titulo, contenido, descripcion, precio, categoria, imagen } = await req.json()
     if (!titulo || !contenido) {
       return NextResponse.json({ message: 'Título y contenido son requeridos' }, { status: 400 })
     }
@@ -33,19 +29,49 @@ export async function POST(request: Request) {
       data: {
         titulo,
         contenido,
+        descripcion,
+        precio,
+        categoria,
+        imagen,
         userId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
       }
     })
 
     return NextResponse.json(anuncio)
   } catch (error) {
-    console.error('Error creating announcement:', error)
-    return NextResponse.json({ message: 'Error al crear el anuncio' }, { status: 500 })
+    console.error('Error al crear anuncio:', error)
+    return NextResponse.json(
+      { message: 'Error al crear el anuncio', error: error instanceof Error ? error.message : 'Error desconocido' },
+      { status: 500 }
+    )
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const token = req.headers.get('Authorization')?.split(' ')[1]
+    let userId: string | undefined
+
+    if (token) {
+      try {
+        userId = await getUserIdFromToken(token)
+        console.log('Usuario autenticado:', userId)
+      } catch (error) {
+        console.error('Error al verificar token:', error)
+        // No retornamos error, continuamos sin autenticación
+      }
+    }
+
+    console.log('Buscando anuncios en la base de datos...')
     const anuncios = await prisma.anuncio.findMany({
       include: {
         user: {
@@ -61,11 +87,16 @@ export async function GET() {
       }
     })
 
-    // Asegurarse de que siempre devolvemos un array
-    return NextResponse.json(Array.isArray(anuncios) ? anuncios : [])
+    console.log('Anuncios encontrados:', anuncios.length)
+    return NextResponse.json(anuncios)
   } catch (error) {
-    console.error('Error fetching announcements:', error)
-    // En caso de error, devolver un array vacío en lugar de un mensaje de error
-    return NextResponse.json([])
+    console.error('Error al obtener anuncios:', error)
+    return NextResponse.json(
+      { 
+        message: 'Error al obtener anuncios', 
+        error: error instanceof Error ? error.message : 'Error desconocido' 
+      },
+      { status: 500 }
+    )
   }
 }

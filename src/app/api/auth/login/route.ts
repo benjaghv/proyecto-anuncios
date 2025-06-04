@@ -1,58 +1,53 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcrypt'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 import { generateToken } from '@/lib/auth'
-import { LoginCredentials, User } from '@/types/user'
+import bcrypt from 'bcryptjs'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json() as LoginCredentials
+    const { email, password } = await request.json()
+    console.log('POST /api/auth/login - Intento de login con email:', email)
 
-    // Validar campos requeridos
     if (!email || !password) {
+      console.log('POST /api/auth/login - Email o contraseña no proporcionados')
       return NextResponse.json(
         { message: 'Email y contraseña son requeridos' },
         { status: 400 }
       )
     }
 
-    // Buscar usuario
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { email }
     })
 
     if (!user) {
+      console.log('POST /api/auth/login - Usuario no encontrado:', email)
       return NextResponse.json(
-        { message: 'Usuario no encontrado' },
-        { status: 404 }
-      )
-    }
-
-    // Verificar contraseña
-    const validPassword = await bcrypt.compare(password, user.password)
-
-    if (!validPassword) {
-      return NextResponse.json(
-        { message: 'Contraseña incorrecta' },
+        { message: 'Credenciales inválidas' },
         { status: 401 }
       )
     }
 
-    // Generar token
-    const token = generateToken({
-      id: user.id,
-      email: user.email
-    })
+    const isValidPassword = await bcrypt.compare(password, user.password)
+    if (!isValidPassword) {
+      console.log('POST /api/auth/login - Contraseña inválida para usuario:', email)
+      return NextResponse.json(
+        { message: 'Credenciales inválidas' },
+        { status: 401 }
+      )
+    }
 
-    // Retornar respuesta sin la contraseña
+    const token = generateToken(user.id)
+    console.log('POST /api/auth/login - Token generado para usuario:', email)
+
     const { password: _, ...userWithoutPassword } = user
+
     return NextResponse.json({
-      message: 'Login exitoso',
-      user: userWithoutPassword as User,
-      token
+      token,
+      user: userWithoutPassword
     })
   } catch (error) {
-    console.error('Error en login:', error)
+    console.error('POST /api/auth/login - Error:', error)
     return NextResponse.json(
       { message: 'Error al iniciar sesión' },
       { status: 500 }

@@ -24,9 +24,9 @@ export default function HomePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [token, setToken] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [anuncios, setAnuncios] = useState<Anuncio[]>([])
   const [favoritos, setFavoritos] = useState<Favorito[]>([])
@@ -34,18 +34,8 @@ export default function HomePage() {
   const [titulo, setTitulo] = useState('')
   const [contenido, setContenido] = useState('')
   const [editandoAnuncio, setEditandoAnuncio] = useState<{ id: string; titulo: string; contenido: string } | null>(null)
+  const [isRefreshingSession, setIsRefreshingSession] = useState(false)
   const router = useRouter()
-
-  // Cargar el usuario desde localStorage al iniciar
-  useEffect(() => {
-    const savedToken = localStorage.getItem('token')
-    const savedUser = localStorage.getItem('user')
-    
-    if (savedToken && savedUser) {
-      setToken(savedToken)
-      setUser(JSON.parse(savedUser))
-    }
-  }, [])
 
   const registrar = async () => {
     try {
@@ -57,6 +47,8 @@ export default function HomePage() {
         return
       }
 
+      console.log('Intentando registrar usuario:', { email, name })
+
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,92 +56,126 @@ export default function HomePage() {
       })
 
       const data = await res.json()
+      console.log('Respuesta del servidor:', data)
 
       if (!res.ok) {
         throw new Error(data.message || 'Error al registrar usuario')
       }
 
-      // Guardar el token en localStorage
-      if (data.token) {
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
-        setToken(data.token)
-        setUser(data.user)
+      if (!data.token) {
+        throw new Error('No se recibió token del servidor')
       }
 
-      alert(data.message || 'Usuario registrado exitosamente')
+      // Guardar el token en localStorage
+      console.log('Guardando token:', data.token)
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      setToken(data.token)
+      setUser(data.user)
+      alert('Usuario registrado exitosamente')
       setEmail('')
       setPassword('')
       setName('')
       setShowRegister(false)
     } catch (err) {
+      console.error('Error en registro:', err)
       setError(err instanceof Error ? err.message : 'Error al registrar usuario')
     } finally {
       setLoading(false)
     }
   }
 
-  const login = async () => {
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
     try {
-      setError('')
-      setLoading(true)
-
-      if (!email || !password) {
-        setError('Por favor completa todos los campos')
-        return
-      }
-
-      const res = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password } as LoginCredentials)
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
       })
 
-      const data = await res.json()
+      const data = await response.json()
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(data.message || 'Error al iniciar sesión')
       }
 
-      if (data.token) {
-        // Guardar el token en localStorage
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
-        setToken(data.token)
-        setUser(data.user)
-        setEmail('')
-        setPassword('')
-      } else {
-        throw new Error(data.message || 'Error al iniciar sesión')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesión')
+      console.log('Login exitoso:', data)
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      setUser(data.user)
+      setToken(data.token)
+      setShowRegister(false)
+      setEmail('')
+      setPassword('')
+      await cargarFavoritos()
+    } catch (error) {
+      console.error('Error en login:', error)
+      setError(error instanceof Error ? error.message : 'Error al iniciar sesión')
     } finally {
       setLoading(false)
     }
   }
 
   const logout = () => {
-    // Limpiar localStorage
+    console.log('Cerrando sesión')
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    setToken('')
     setUser(null)
+    setToken(null)
+    setFavoritos([])
+    setError('')
   }
 
   const crearAnuncio = async () => {
-    const res = await fetch('/api/anuncios', {
-      method: 'POST',
-      headers: {
+    try {
+      setError('')
+      setLoading(true)
+
+      if (!token) {
+        setError('Debes iniciar sesión para crear un anuncio')
+        return
+      }
+
+      if (!titulo || !contenido) {
+        setError('Por favor completa todos los campos')
+        return
+      }
+
+      console.log('Creando anuncio con token:', token)
+
+      const headers = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ titulo, contenido })
-    })
-    if (res.ok) {
+        'Authorization': `Bearer ${token}`
+      }
+      console.log('Headers:', headers)
+
+      const res = await fetch('/api/anuncios', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ titulo, contenido })
+      })
+
+      const data = await res.json()
+      console.log('Respuesta del servidor:', data)
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Error al crear el anuncio')
+      }
+
       setTitulo('')
       setContenido('')
-      cargarAnuncios()
+      await cargarAnuncios()
+    } catch (err) {
+      console.error('Error al crear anuncio:', err)
+      setError(err instanceof Error ? err.message : 'Error al crear el anuncio')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -158,25 +184,43 @@ export default function HomePage() {
       setError('')
       setLoading(true)
 
-      const res = await fetch(`/api/anuncios/${id}`, {
+      if (!token) {
+        setError('Debes iniciar sesión para editar un anuncio')
+        return
+      }
+
+      if (!editandoAnuncio?.titulo || !editandoAnuncio?.contenido) {
+        setError('Título y contenido son requeridos')
+        return
+      }
+
+      console.log('Editando anuncio con token:', token)
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+      console.log('Headers:', headers)
+
+      const response = await fetch(`/api/anuncios/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify({
-          titulo: editandoAnuncio?.titulo,
-          contenido: editandoAnuncio?.contenido
+          titulo: editandoAnuncio.titulo,
+          contenido: editandoAnuncio.contenido
         })
       })
 
-      if (!res.ok) {
-        throw new Error('Error al editar el anuncio')
+      const data = await response.json()
+      console.log('Respuesta del servidor:', data)
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al editar el anuncio')
       }
 
       setEditandoAnuncio(null)
-      cargarAnuncios()
+      await cargarAnuncios()
     } catch (err) {
+      console.error('Error al editar anuncio:', err)
       setError(err instanceof Error ? err.message : 'Error al editar el anuncio')
     } finally {
       setLoading(false)
@@ -211,69 +255,147 @@ export default function HomePage() {
     }
   }
 
-  const cargarAnuncios = async () => {
+  const cargarAnuncios = useCallback(async () => {
     try {
-      const res = await fetch('/api/anuncios')
-      const data = await res.json()
-      setAnuncios(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('Error fetching announcements:', err)
-      setError('Error al cargar los anuncios')
-      setAnuncios([])
+      setLoading(true)
+      setError(null)
+      
+      const token = localStorage.getItem('token')
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch('/api/anuncios', {
+        headers
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Error al cargar anuncios' }))
+        throw new Error(errorData.message || 'Error al cargar anuncios')
+      }
+
+      const data = await response.json()
+      if (!Array.isArray(data)) {
+        throw new Error('Formato de respuesta inválido')
+      }
+
+      setAnuncios(data)
+    } catch (error) {
+      console.error('Error al cargar anuncios:', error)
+      setError(error instanceof Error ? error.message : 'Error al cargar anuncios')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const cargarFavoritos = useCallback(async () => {
-    if (!token) return
+  const cargarFavoritos = async () => {
     try {
-      const res = await fetch('/api/favoritos', {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        console.log('No hay token para cargar favoritos')
+        return
+      }
+
+      console.log('Cargando favoritos con token:', token)
+      const response = await fetch('/api/favoritos', {
         headers: {
-          Authorization: `Bearer ${token}`
+          'Authorization': `Bearer ${token}`
         }
       })
-      const data = await res.json()
-      setFavoritos(data)
-    } catch {
+
+      if (!response.ok) {
+        const data = await response.json()
+        console.error('Error al cargar favoritos:', data)
+        if (response.status === 401) {
+          console.log('Token inválido, cerrando sesión')
+          setError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.')
+          logout()
+        } else {
+          setError(data.message || 'Error al cargar favoritos')
+        }
+        return
+      }
+
+      const favoritos = await response.json()
+      console.log('Favoritos cargados:', favoritos)
+      setFavoritos(favoritos)
+    } catch (error) {
+      console.error('Error al cargar favoritos:', error)
       setError('Error al cargar favoritos')
     }
-  }, [token])
+  }
 
   const toggleFavorito = async (anuncioId: string) => {
-    if (!token) return
+    if (!user) {
+      console.log('No hay usuario autenticado')
+      return
+    }
+
     try {
-      const esFavorito = favoritos.some(f => f.anuncioId === anuncioId)
-      const method = esFavorito ? 'DELETE' : 'POST'
-      
-      const res = await fetch('/api/favoritos', {
-        method,
+      console.log('Usuario actual:', user.email)
+      const token = localStorage.getItem('token')
+      console.log('Token actual:', token)
+
+      const isFavorito = favoritos.some(f => f.anuncioId === anuncioId)
+      console.log('¿Es favorito?', isFavorito)
+
+      const response = await fetch('/api/favoritos', {
+        method: isFavorito ? 'DELETE' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ anuncioId })
       })
 
-      if (!res.ok) {
-        throw new Error('Error al actualizar favoritos')
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('Token inválido, cerrando sesión')
+          logout()
+          return
+        }
+        throw new Error('Error al actualizar favorito')
       }
 
+      // Actualizar la lista de favoritos
       await cargarFavoritos()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar favoritos')
+      alert(isFavorito ? 'Anuncio removido de favoritos' : 'Anuncio agregado a favoritos')
+    } catch (error) {
+      console.error('Error al actualizar favorito:', error)
+      alert('Error al actualizar favorito')
     }
   }
 
   useEffect(() => {
-    if (token) {
-      cargarFavoritos()
+    const storedUser = localStorage.getItem('user')
+    const storedToken = localStorage.getItem('token')
+
+    if (storedUser && storedToken) {
+      try {
+        const userData = JSON.parse(storedUser)
+        setUser(userData)
+        setToken(storedToken)
+      } catch (error) {
+        console.error('Error al restaurar sesión:', error)
+        logout()
+      }
     }
-  }, [token, cargarFavoritos])
+  }, [])
 
   useEffect(() => {
+    if (user && token) {
+      cargarFavoritos()
+    }
+  }, [user, token])
+
+  useEffect(() => {
+    // Siempre cargar anuncios
     cargarAnuncios()
-  }, [])
+  }, [cargarAnuncios])
 
   if (loading) {
     return (
@@ -317,18 +439,36 @@ export default function HomePage() {
             <h1 className="text-4xl font-bold text-center text-gray-900 mb-8 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Sistema de Anuncios</h1>
             
             <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-8 border border-gray-100">
-              <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">Acceso</h2>
+              <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
+                {showRegister ? 'Registro' : 'Acceso'}
+              </h2>
               {error && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
                   {error}
                 </div>
               )}
               <div className="space-y-6">
+                {showRegister && (
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+                    <input
+                      id="name"
+                      type="text"
+                      autoComplete="name"
+                      className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
+                      placeholder="Tu nombre"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      disabled={loading}
+                    />
+                  </div>
+                )}
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     id="email"
                     type="email"
+                    autoComplete="email"
                     className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
                     placeholder="tu@email.com"
                     value={email}
@@ -341,6 +481,7 @@ export default function HomePage() {
                   <input
                     id="password"
                     type="password"
+                    autoComplete={showRegister ? "new-password" : "current-password"}
                     className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
                     placeholder="••••••••"
                     value={password}
@@ -349,20 +490,41 @@ export default function HomePage() {
                   />
                 </div>
                 <div className="flex space-x-4">
-                  <button
-                    onClick={() => setShowRegister(true)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
-                    disabled={loading}
-                  >
-                    {loading ? 'Procesando...' : 'Registrarse'}
-                  </button>
-                  <button
-                    onClick={login}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
-                    disabled={loading}
-                  >
-                    {loading ? 'Procesando...' : 'Iniciar sesión'}
-                  </button>
+                  {showRegister ? (
+                    <>
+                      <button
+                        onClick={registrar}
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                        disabled={loading}
+                      >
+                        {loading ? 'Procesando...' : 'Registrarse'}
+                      </button>
+                      <button
+                        onClick={() => setShowRegister(false)}
+                        className="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                        disabled={loading}
+                      >
+                        Volver
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setShowRegister(true)}
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                        disabled={loading}
+                      >
+                        Registrarse
+                      </button>
+                      <button
+                        onClick={login}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                        disabled={loading}
+                      >
+                        {loading ? 'Procesando...' : 'Iniciar sesión'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

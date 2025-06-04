@@ -1,116 +1,141 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import { prisma } from '@/lib/prisma'
+import { getUserIdFromToken } from '@/lib/auth'
+import { db } from '@/lib/db'
 
-interface JwtPayload {
-  userId: string
-}
-
-async function getUserIdFromToken(token: string) {
+export async function GET(request: Request) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as JwtPayload
-    return decoded.userId
-  } catch {
-    return null
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const token = req.headers.get('Authorization')?.split(' ')[1]
+    const token = request.headers.get('Authorization')?.split(' ')[1]
     if (!token) {
-      return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Token no proporcionado' },
+        { status: 401 }
+      )
     }
 
     const userId = await getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
+    console.log('UserId extraído en GET favoritos:', userId)
+
+    const favoritos = await db.favorito.findMany({
+      where: { userId },
+      include: {
+        anuncio: true
+      }
+    })
+
+    return NextResponse.json(favoritos)
+  } catch (error) {
+    console.error('Error al obtener favoritos:', error)
+    return NextResponse.json(
+      { message: 'Error al obtener favoritos' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const token = request.headers.get('Authorization')?.split(' ')[1]
+    if (!token) {
+      return NextResponse.json(
+        { message: 'Token no proporcionado' },
+        { status: 401 }
+      )
     }
 
-    const { anuncioId } = await req.json()
-    if (!anuncioId) {
-      return NextResponse.json({ message: 'ID del anuncio requerido' }, { status: 400 })
+    const userId = await getUserIdFromToken(token)
+    console.log('UserId extraído en POST favoritos:', userId)
+
+    const { anuncioId } = await request.json()
+
+    // Verificar que el anuncio existe
+    const anuncio = await db.anuncio.findUnique({
+      where: { id: anuncioId }
+    })
+
+    if (!anuncio) {
+      return NextResponse.json(
+        { message: 'Anuncio no encontrado' },
+        { status: 404 }
+      )
     }
 
-    const favorito = await prisma.favorito.create({
-      data: {
+    // Verificar que no existe ya como favorito
+    const favoritoExistente = await db.favorito.findFirst({
+      where: {
         userId,
         anuncioId
       }
     })
 
+    if (favoritoExistente) {
+      return NextResponse.json(
+        { message: 'El anuncio ya está en favoritos' },
+        { status: 400 }
+      )
+    }
+
+    const favorito = await db.favorito.create({
+      data: {
+        userId,
+        anuncioId
+      },
+      include: {
+        anuncio: true
+      }
+    })
+
     return NextResponse.json(favorito)
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      return NextResponse.json({ message: 'El anuncio ya está en favoritos' }, { status: 400 })
-    }
-    return NextResponse.json({ message: 'Error al agregar a favoritos' }, { status: 500 })
+    console.error('Error al agregar favorito:', error)
+    return NextResponse.json(
+      { message: 'Error al agregar favorito' },
+      { status: 500 }
+    )
   }
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(request: Request) {
   try {
-    const token = req.headers.get('Authorization')?.split(' ')[1]
+    const token = request.headers.get('Authorization')?.split(' ')[1]
     if (!token) {
-      return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Token no proporcionado' },
+        { status: 401 }
+      )
     }
 
     const userId = await getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
-    }
+    console.log('UserId extraído en DELETE favoritos:', userId)
 
-    const { anuncioId } = await req.json()
-    if (!anuncioId) {
-      return NextResponse.json({ message: 'ID del anuncio requerido' }, { status: 400 })
-    }
+    const { anuncioId } = await request.json()
 
-    await prisma.favorito.delete({
+    // Verificar que el favorito existe
+    const favorito = await db.favorito.findFirst({
       where: {
-        userId_anuncioId: {
-          userId,
-          anuncioId
-        }
+        userId,
+        anuncioId
       }
     })
 
-    return NextResponse.json({ message: 'Favorito eliminado' })
-  } catch {
-    return NextResponse.json({ message: 'Error al eliminar de favoritos' }, { status: 500 })
-  }
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    const token = req.headers.get('Authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ message: 'No autorizado' }, { status: 401 })
+    if (!favorito) {
+      return NextResponse.json(
+        { message: 'Favorito no encontrado' },
+        { status: 404 }
+      )
     }
 
-    const userId = await getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json({ message: 'Token inválido' }, { status: 401 })
-    }
-
-    const favoritos = await prisma.favorito.findMany({
-      where: { userId },
-      include: {
-        anuncio: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }
+    await db.favorito.delete({
+      where: {
+        id: favorito.id
       }
     })
 
-    return NextResponse.json(favoritos)
-  } catch {
-    return NextResponse.json({ message: 'Error al obtener favoritos' }, { status: 500 })
+    return NextResponse.json({ message: 'Favorito eliminado exitosamente' })
+  } catch (error) {
+    console.error('Error al eliminar favorito:', error)
+    return NextResponse.json(
+      { message: 'Error al eliminar favorito' },
+      { status: 500 }
+    )
   }
 } 
