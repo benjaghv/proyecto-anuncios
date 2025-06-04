@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface User {
   id: string
@@ -14,6 +16,7 @@ interface Anuncio {
   contenido: string
   userId: string
   user?: User
+  creadoEn: string
 }
 
 interface Favorito {
@@ -30,10 +33,11 @@ export default function HomePage() {
   const [contenido, setContenido] = useState('')
   const [anuncios, setAnuncios] = useState<Anuncio[]>([])
   const [favoritos, setFavoritos] = useState<Favorito[]>([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<User | null>(null)
   const [editandoAnuncio, setEditandoAnuncio] = useState<{ id: string; titulo: string; contenido: string } | null>(null)
+  const router = useRouter()
 
   const registrar = async () => {
     try {
@@ -191,9 +195,13 @@ export default function HomePage() {
     try {
       const res = await fetch('/api/anuncios')
       const data = await res.json()
-      setAnuncios(data)
-    } catch {
+      setAnuncios(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error('Error fetching announcements:', err)
       setError('Error al cargar los anuncios')
+      setAnuncios([])
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -246,6 +254,36 @@ export default function HomePage() {
   useEffect(() => {
     cargarAnuncios()
   }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-semibold text-gray-700">Cargando...</h2>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-900">Error</h2>
+            <p className="mt-2 text-red-600">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 relative py-8 px-4 sm:px-6 lg:px-8">

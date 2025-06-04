@@ -38,7 +38,8 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json(anuncio)
-  } catch {
+  } catch (error) {
+    console.error('Error creating announcement:', error)
     return NextResponse.json({ message: 'Error al crear el anuncio' }, { status: 500 })
   }
 }
@@ -54,11 +55,17 @@ export async function GET() {
             email: true
           }
         }
+      },
+      orderBy: {
+        creadoEn: 'desc'
       }
     })
 
-    return NextResponse.json(anuncios)
-  } catch {
-    return NextResponse.json({ message: 'Error al obtener los anuncios' }, { status: 500 })
+    // Asegurarse de que siempre devolvemos un array
+    return NextResponse.json(Array.isArray(anuncios) ? anuncios : [])
+  } catch (error) {
+    console.error('Error fetching announcements:', error)
+    // En caso de error, devolver un array vacío en lugar de un mensaje de error
+    return NextResponse.json([])
   }
 }
