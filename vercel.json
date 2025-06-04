@@ -2,5 +2,8 @@
   "buildCommand": "prisma generate && prisma db push && next build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "env": {
+    "DATABASE_URL": "file:/tmp/dev.db"
+  }
 } 
