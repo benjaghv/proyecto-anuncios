@@ -3,8 +3,6 @@
   "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next",
-  "env": {
-    "DATABASE_URL": "file:/tmp/dev.db"
-  }
+  "outputDirectory": ".next"
+
 } 
