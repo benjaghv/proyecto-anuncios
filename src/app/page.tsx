@@ -1,103 +1,493 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useEffect, useState } from 'react'
+
+export default function HomePage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [token, setToken] = useState('')
+  const [titulo, setTitulo] = useState('')
+  const [contenido, setContenido] = useState('')
+  const [anuncios, setAnuncios] = useState([])
+  const [favoritos, setFavoritos] = useState<any[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [editandoAnuncio, setEditandoAnuncio] = useState<{ id: string; titulo: string; contenido: string } | null>(null)
+
+  const registrar = async () => {
+    try {
+      setError('')
+      setLoading(true)
+      
+      if (!email || !password) {
+        setError('Por favor completa todos los campos')
+        return
+      }
+
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email, 
+          password,
+          name: email.split('@')[0] // Usamos la parte del email antes del @ como nombre por defecto
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Error al registrar usuario' }))
+        throw new Error(errorData.message || 'Error al registrar usuario')
+      }
+
+      const data = await res.json()
+      alert(data.message || 'Usuario registrado exitosamente')
+      setEmail('')
+      setPassword('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al registrar usuario')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const login = async () => {
+    try {
+      setError('')
+      setLoading(true)
+
+      if (!email || !password) {
+        setError('Por favor completa todos los campos')
+        return
+      }
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Error al iniciar sesión' }))
+        throw new Error(errorData.message || 'Error al iniciar sesión')
+      }
+
+      const data = await res.json()
+      if (data.token) {
+        setToken(data.token)
+        setUser(data.user)
+        setEmail('')
+        setPassword('')
+      } else {
+        throw new Error(data.message || 'Error al iniciar sesión')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al iniciar sesión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const logout = () => {
+    setToken('')
+    setUser(null)
+  }
+
+  const crearAnuncio = async () => {
+    const res = await fetch('/api/anuncios', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ titulo, contenido })
+    })
+    if (res.ok) {
+      setTitulo('')
+      setContenido('')
+      cargarAnuncios()
+    }
+  }
+
+  const editarAnuncio = async (id: string) => {
+    try {
+      setError('')
+      setLoading(true)
+
+      const res = await fetch(`/api/anuncios/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          titulo: editandoAnuncio?.titulo,
+          contenido: editandoAnuncio?.contenido
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error('Error al editar el anuncio')
+      }
+
+      setEditandoAnuncio(null)
+      cargarAnuncios()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al editar el anuncio')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const borrarAnuncio = async (id: string) => {
+    if (!confirm('¿Estás seguro de que quieres borrar este anuncio?')) {
+      return
+    }
+
+    try {
+      setError('')
+      setLoading(true)
+
+      const res = await fetch(`/api/anuncios/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!res.ok) {
+        throw new Error('Error al borrar el anuncio')
+      }
+
+      cargarAnuncios()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al borrar el anuncio')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const cargarAnuncios = async () => {
+    try {
+      const res = await fetch('/api/anuncios')
+      const data = await res.json()
+      setAnuncios(data)
+    } catch (err) {
+      setError('Error al cargar los anuncios')
+    }
+  }
+
+  const cargarFavoritos = async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/favoritos', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      const data = await res.json()
+      setFavoritos(data)
+    } catch (err) {
+      setError('Error al cargar favoritos')
+    }
+  }
+
+  const toggleFavorito = async (anuncioId: string) => {
+    if (!token) return
+    try {
+      const esFavorito = favoritos.some(f => f.anuncioId === anuncioId)
+      const method = esFavorito ? 'DELETE' : 'POST'
+      
+      const res = await fetch('/api/favoritos', {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ anuncioId })
+      })
+
+      if (!res.ok) {
+        throw new Error('Error al actualizar favoritos')
+      }
+
+      await cargarFavoritos()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al actualizar favoritos')
+    }
+  }
+
+  useEffect(() => {
+    if (token) {
+      cargarFavoritos()
+    }
+  }, [token])
+
+  useEffect(() => {
+    cargarAnuncios()
+  }, [])
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 relative py-8 px-4 sm:px-6 lg:px-8">
+      {/* Patrón de fondo decorativo */}
+      <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
+      
+      <div className="max-w-6xl mx-auto relative">
+        {!user ? (
+          // Layout cuando no hay usuario
+          <div className="max-w-2xl mx-auto">
+            <h1 className="text-4xl font-bold text-center text-gray-900 mb-8 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Sistema de Anuncios</h1>
+            
+            <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-8 border border-gray-100">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">Acceso</h2>
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
+                    placeholder="tu@email.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                  <input
+                    id="password"
+                    type="password"
+                    className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    onClick={registrar}
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                    disabled={loading}
+                  >
+                    {loading ? 'Procesando...' : 'Registrarse'}
+                  </button>
+                  <button
+                    onClick={login}
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
+                    disabled={loading}
+                  >
+                    {loading ? 'Procesando...' : 'Iniciar sesión'}
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+            {/* Anuncios centrados cuando no hay usuario */}
+            <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-6 border border-gray-100">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-4 text-center">Anuncios</h2>
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-4">
+                {anuncios.map((a: any) => (
+                  <div key={a.id} className="border-b border-gray-200 pb-4 last:border-0">
+                    <h3 className="text-lg font-medium text-gray-900">{a.titulo}</h3>
+                    <p className="mt-2 text-gray-600">{a.contenido}</p>
+                    <p className="mt-2 text-sm text-gray-500">Publicado por: {a.user?.name || a.user?.email}</p>
+                  </div>
+                ))}
+                {anuncios.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No hay anuncios disponibles</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Layout cuando hay usuario
+          <>
+            <div className="flex justify-between items-center mb-8">
+              <h1 className="text-4xl font-bold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Sistema de Anuncios</h1>
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-700">¡Hola, {user.name}!</span>
+                <button
+                  onClick={logout}
+                  className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-pink-700 transition-all duration-200 transform hover:scale-105 shadow-md cursor-pointer font-medium"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Main Content */}
+              <div className="lg:col-span-2">
+                {/* Create Announcement Section */}
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-6 mb-8 border border-gray-100">
+                  <h2 className="text-2xl font-semibold text-gray-800 mb-4">Crear Anuncio</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="titulo" className="block text-sm font-medium text-gray-700 mb-2">Título</label>
+                      <input
+                        id="titulo"
+                        className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
+                        placeholder="Título del anuncio"
+                        value={titulo}
+                        onChange={e => setTitulo(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="contenido" className="block text-sm font-medium text-gray-700 mb-2">Contenido</label>
+                      <textarea
+                        id="contenido"
+                        rows={6}
+                        className="mt-1 block w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm text-lg py-3 px-4"
+                        placeholder="Contenido del anuncio"
+                        value={contenido}
+                        onChange={e => setContenido(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      onClick={crearAnuncio}
+                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md cursor-pointer font-medium"
+                    >
+                      Publicar Anuncio
+                    </button>
+                  </div>
+                </div>
+
+                {/* Announcements List */}
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-6 border border-gray-100">
+                  <h2 className="text-2xl font-semibold text-gray-800 mb-4">Anuncios</h2>
+                  {error && (
+                    <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                      {error}
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {anuncios.map((a: any) => (
+                      <div key={a.id} className="border-b border-gray-200 pb-4 last:border-0">
+                        {editandoAnuncio && editandoAnuncio.id === a.id ? (
+                          <div className="space-y-4">
+                            <input
+                              className="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm"
+                              value={editandoAnuncio.titulo}
+                              onChange={e => setEditandoAnuncio({
+                                id: editandoAnuncio.id,
+                                titulo: e.target.value,
+                                contenido: editandoAnuncio.contenido
+                              })}
+                            />
+                            <textarea
+                              className="w-full rounded-lg border-gray-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white/50 backdrop-blur-sm"
+                              value={editandoAnuncio.contenido}
+                              onChange={e => setEditandoAnuncio({
+                                id: editandoAnuncio.id,
+                                titulo: editandoAnuncio.titulo,
+                                contenido: e.target.value
+                              })}
+                            />
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => editarAnuncio(a.id)}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md cursor-pointer font-medium"
+                                disabled={loading}
+                              >
+                                {loading ? 'Guardando...' : 'Guardar'}
+                              </button>
+                              <button
+                                onClick={() => setEditandoAnuncio(null)}
+                                className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-4 py-2 rounded-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-200 transform hover:scale-105 shadow-md cursor-pointer font-medium"
+                                disabled={loading}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h3 className="text-lg font-medium text-gray-900">{a.titulo}</h3>
+                                <p className="mt-2 text-gray-600">{a.contenido}</p>
+                                <p className="mt-2 text-sm text-gray-500">Publicado por: {a.user?.name || a.user?.email}</p>
+                              </div>
+                              {user && (
+                                <button
+                                  onClick={() => toggleFavorito(a.id)}
+                                  className={`text-2xl cursor-pointer transition-all duration-200 transform hover:scale-110 ${
+                                    favoritos.some(f => f.anuncioId === a.id)
+                                      ? 'text-yellow-500 hover:text-yellow-600'
+                                      : 'text-gray-400 hover:text-yellow-500'
+                                  }`}
+                                >
+                                  ★
+                                </button>
+                              )}
+                            </div>
+                            {user && a.userId === user.id && (
+                              <div className="mt-2 flex space-x-2">
+                                <button
+                                  onClick={() => setEditandoAnuncio({ id: a.id, titulo: a.titulo, contenido: a.contenido })}
+                                  className="text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => borrarAnuncio(a.id)}
+                                  className="text-red-600 hover:text-red-800 cursor-pointer font-medium"
+                                >
+                                  Borrar
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {anuncios.length === 0 && (
+                      <p className="text-gray-500 text-center py-4">No hay anuncios disponibles</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Favorites Sidebar */}
+              <div className="lg:col-span-1">
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg p-6 sticky top-8 border border-gray-100">
+                  <h2 className="text-2xl font-semibold text-gray-800 mb-4">Favoritos</h2>
+                  <div className="space-y-4">
+                    {favoritos.map((f: any) => (
+                      <div key={f.id} className="border-b border-gray-200 pb-4 last:border-0">
+                        <h3 className="text-lg font-medium text-gray-900">{f.anuncio.titulo}</h3>
+                        <p className="mt-2 text-gray-600 line-clamp-2">{f.anuncio.contenido}</p>
+                        <p className="mt-2 text-sm text-gray-500">Publicado por: {f.anuncio.user?.name || f.anuncio.user?.email}</p>
+                        <button
+                          onClick={() => toggleFavorito(f.anuncioId)}
+                          className="mt-2 text-yellow-500 hover:text-yellow-600 cursor-pointer font-medium"
+                        >
+                          Quitar de favoritos
+                        </button>
+                      </div>
+                    ))}
+                    {favoritos.length === 0 && (
+                      <p className="text-gray-500 text-center py-4">No tienes anuncios favoritos</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </main>
+  )
 }
