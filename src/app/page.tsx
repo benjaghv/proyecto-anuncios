@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-interface User {
-  id: string
-  name: string
-  email: string
-}
+import { User, LoginCredentials, RegisterCredentials } from '@/types/user'
 
 interface Anuncio {
   id: string
@@ -28,23 +23,36 @@ interface Favorito {
 export default function HomePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const [token, setToken] = useState('')
-  const [titulo, setTitulo] = useState('')
-  const [contenido, setContenido] = useState('')
+  const [user, setUser] = useState<User | null>(null)
   const [anuncios, setAnuncios] = useState<Anuncio[]>([])
   const [favoritos, setFavoritos] = useState<Favorito[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<User | null>(null)
+  const [showRegister, setShowRegister] = useState(false)
+  const [titulo, setTitulo] = useState('')
+  const [contenido, setContenido] = useState('')
   const [editandoAnuncio, setEditandoAnuncio] = useState<{ id: string; titulo: string; contenido: string } | null>(null)
   const router = useRouter()
+
+  // Cargar el usuario desde localStorage al iniciar
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token')
+    const savedUser = localStorage.getItem('user')
+    
+    if (savedToken && savedUser) {
+      setToken(savedToken)
+      setUser(JSON.parse(savedUser))
+    }
+  }, [])
 
   const registrar = async () => {
     try {
       setError('')
       setLoading(true)
       
-      if (!email || !password) {
+      if (!email || !password || !name) {
         setError('Por favor completa todos los campos')
         return
       }
@@ -52,22 +60,28 @@ export default function HomePage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email, 
-          password,
-          name: email.split('@')[0] // Usamos la parte del email antes del @ como nombre por defecto
-        })
+        body: JSON.stringify({ email, password, name } as RegisterCredentials)
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: 'Error al registrar usuario' }))
-        throw new Error(errorData.message || 'Error al registrar usuario')
+        throw new Error(data.message || 'Error al registrar usuario')
       }
 
-      const data = await res.json()
+      // Guardar el token en localStorage
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        setToken(data.token)
+        setUser(data.user)
+      }
+
       alert(data.message || 'Usuario registrado exitosamente')
       setEmail('')
       setPassword('')
+      setName('')
+      setShowRegister(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrar usuario')
     } finally {
@@ -88,16 +102,19 @@ export default function HomePage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password } as LoginCredentials)
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: 'Error al iniciar sesión' }))
-        throw new Error(errorData.message || 'Error al iniciar sesión')
+        throw new Error(data.message || 'Error al iniciar sesión')
       }
 
-      const data = await res.json()
       if (data.token) {
+        // Guardar el token en localStorage
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
         setToken(data.token)
         setUser(data.user)
         setEmail('')
@@ -113,6 +130,9 @@ export default function HomePage() {
   }
 
   const logout = () => {
+    // Limpiar localStorage
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
     setToken('')
     setUser(null)
   }
@@ -330,7 +350,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex space-x-4">
                   <button
-                    onClick={registrar}
+                    onClick={() => setShowRegister(true)}
                     className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer font-medium"
                     disabled={loading}
                   >

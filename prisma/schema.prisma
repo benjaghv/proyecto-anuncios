@@ -13,6 +13,8 @@ model User {
   email     String    @unique
   password  String
   image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   anuncios  Anuncio[]
   favoritos Favorito[]
 }
@@ -22,6 +24,7 @@ model Anuncio {
   titulo    String
   contenido String
   creadoEn  DateTime  @default(now())
+  updatedAt DateTime @updatedAt
   userId    String
   user      User      @relation(fields: [userId], references: [id])
   favoritos Favorito[]

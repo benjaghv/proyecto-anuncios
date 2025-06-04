@@ -1,31 +1,63 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcrypt'
+import { generateToken } from '@/lib/auth'
+import { RegisterCredentials, User } from '@/types/user'
 
-const prisma = new PrismaClient()
+export async function POST(request: Request) {
+  try {
+    const { email, password, name } = await request.json() as RegisterCredentials
 
-export async function POST(req: NextRequest) {
-  const { email, password, name } = await req.json()
-  const userExist = await prisma.user.findUnique({ where: { email } })
-  if (userExist) {
-    return NextResponse.json({ message: 'Usuario ya existe' }, { status: 400 })
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10)
-  const user = await prisma.user.create({
-    data: { 
-      email, 
-      password: hashedPassword,
-      name: name || email.split('@')[0] // Usar el nombre proporcionado o la parte del email antes del @
+    // Validar campos requeridos
+    if (!email || !password || !name) {
+      return NextResponse.json(
+        { message: 'Todos los campos son requeridos' },
+        { status: 400 }
+      )
     }
-  })
 
-  return NextResponse.json({ 
-    message: 'Usuario registrado', 
-    user: {
+    // Verificar si el usuario ya existe
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    })
+
+    if (existingUser) {
+      return NextResponse.json(
+        { message: 'El usuario ya existe' },
+        { status: 400 }
+      )
+    }
+
+    // Hashear la contraseña
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Crear el usuario
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name
+      }
+    })
+
+    // Generar token
+    const token = generateToken({
       id: user.id,
-      name: user.name,
       email: user.email
-    }
-  })
+    })
+
+    // Retornar respuesta sin la contraseña
+    const { password: _, ...userWithoutPassword } = user
+    return NextResponse.json({
+      message: 'Usuario registrado exitosamente',
+      user: userWithoutPassword as User,
+      token
+    })
+  } catch (error) {
+    console.error('Error en registro:', error)
+    return NextResponse.json(
+      { message: 'Error al registrar usuario' },
+      { status: 500 }
+    )
+  }
 }
